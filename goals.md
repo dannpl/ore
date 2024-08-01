@@ -1,0 +1,1 @@
+cargo build && ./target/debug/ore mine --keypair key.json --rpc https://mainnet.helius-rpc.com/\?api-key\=e50cf04d-a438-4700-89e7-327734c48300

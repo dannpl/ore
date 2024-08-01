@@ -60,15 +60,14 @@ impl Miner {
             }
         });
 
+        let mut ixs = vec![];
+        let mut hashs = 0;
+
         // Start mining loop
         loop {
             // Fetch proof
             let proof = get_proof_with_authority(&self.rpc_client, signer.pubkey()).await;
             println!("\nStake balance: {} ORE", amount_u64_to_string(proof.balance));
-
-            current_tip = *tip.read().await;
-
-            println!("Jito Tip: {:?}", ((current_tip as f64) / (10_f64).powf(9.0)).to_string());
 
             // Calc cutoff time
             let cutoff_time = self.get_cutoff(proof, args.buffer_time).await;
@@ -84,19 +83,34 @@ impl Miner {
 
             // Submit most difficult hash
             let mut compute_budget = 500_000;
-            let mut ixs = vec![ore_api::instruction::auth(proof_pubkey(signer.pubkey()))];
-            if self.should_reset(config).await {
-                compute_budget += 100_000;
-                ixs.push(ore_api::instruction::reset(signer.pubkey()));
+
+            if hashs == 3 {
+                current_tip = *tip.read().await;
+
+                ixs.push(ore_api::instruction::auth(proof_pubkey(signer.pubkey())));
+
+                if self.should_reset(config).await {
+                    compute_budget += 100_000;
+                    ixs.push(ore_api::instruction::reset(signer.pubkey()));
+                }
+
+                println!("Jito Tip: {:?}", ((current_tip as f64) / (10_f64).powf(9.0)).to_string());
+
+                self.send_and_confirm(
+                    &ixs,
+                    ComputeBudget::Fixed(compute_budget),
+                    current_tip.clone()
+                ).await.ok();
+
+                hashs = 0;
+                ixs.clear();
             }
+
             ixs.push(
                 ore_api::instruction::mine(signer.pubkey(), signer.pubkey(), find_bus(), solution)
             );
-            self.send_and_confirm(
-                &ixs,
-                ComputeBudget::Fixed(compute_budget),
-                current_tip.clone()
-            ).await.ok();
+
+            hashs += 1;
         }
     }
 

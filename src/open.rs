@@ -1,6 +1,6 @@
 use solana_sdk::signature::Signer;
 
-use crate::{send_and_confirm::ComputeBudget, utils::proof_pubkey, Miner};
+use crate::{ send_and_confirm::ComputeBudget, utils::proof_pubkey, Miner, DEFAULT_JITO_TIP };
 
 impl Miner {
     pub async fn open(&self) {
@@ -14,8 +14,6 @@ impl Miner {
         // Sign and send transaction.
         println!("Generating challenge...");
         let ix = ore_api::instruction::open(signer.pubkey(), signer.pubkey(), signer.pubkey());
-        self.send_and_confirm(&[ix], ComputeBudget::Dynamic, false)
-            .await
-            .ok();
+        self.send_and_confirm(&[ix], ComputeBudget::Dynamic, DEFAULT_JITO_TIP).await.ok();
     }
 }

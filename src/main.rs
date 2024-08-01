@@ -6,8 +6,6 @@ mod claim;
 mod close;
 mod config;
 mod cu_limits;
-#[cfg(feature = "admin")]
-mod initialize;
 mod mine;
 mod open;
 mod rewards;
@@ -18,55 +16,43 @@ mod utils;
 
 use std::sync::Arc;
 
+pub const DEFAULT_JITO_TIP: u64 = 5000;
+
 use args::*;
-use clap::{command, Parser, Subcommand};
+use clap::{ command, Parser, Subcommand };
 use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    signature::{read_keypair_file, Keypair},
-};
+use solana_sdk::{ commitment_config::CommitmentConfig, signature::{ read_keypair_file, Keypair } };
 
 struct Miner {
     pub keypair_filepath: Option<String>,
     pub priority_fee: u64,
     pub rpc_client: Arc<RpcClient>,
+    pub send_client: Arc<RpcClient>,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    #[command(about = "Fetch an account balance")]
-    Balance(BalanceArgs),
+    #[command(about = "Fetch an account balance")] Balance(BalanceArgs),
 
-    #[command(about = "Benchmark your hashpower")]
-    Benchmark(BenchmarkArgs),
+    #[command(about = "Benchmark your hashpower")] Benchmark(BenchmarkArgs),
 
-    #[command(about = "Fetch the bus account balances")]
-    Busses(BussesArgs),
+    #[command(about = "Fetch the bus account balances")] Busses(BussesArgs),
 
-    #[command(about = "Claim your mining rewards")]
-    Claim(ClaimArgs),
+    #[command(about = "Claim your mining rewards")] Claim(ClaimArgs),
 
-    #[command(about = "Close your account to recover rent")]
-    Close(CloseArgs),
+    #[command(about = "Close your account to recover rent")] Close(CloseArgs),
 
-    #[command(about = "Fetch the program config")]
-    Config(ConfigArgs),
+    #[command(about = "Fetch the program config")] Config(ConfigArgs),
 
-    #[command(about = "Start mining")]
-    Mine(MineArgs),
+    #[command(about = "Start mining")] Mine(MineArgs),
 
-    #[command(about = "Fetch the current reward rate for each difficulty level")]
-    Rewards(RewardsArgs),
+    #[command(about = "Fetch the current reward rate for each difficulty level")] Rewards(
+        RewardsArgs,
+    ),
 
-    #[command(about = "Stake to earn a rewards multiplier")]
-    Stake(StakeArgs),
+    #[command(about = "Stake to earn a rewards multiplier")] Stake(StakeArgs),
 
-    #[command(about = "Upgrade your ORE tokens from v1 to v2")]
-    Upgrade(UpgradeArgs),
-
-    #[cfg(feature = "admin")]
-    #[command(about = "Initialize the program")]
-    Initialize(InitializeArgs),
+    #[command(about = "Upgrade your ORE tokens from v1 to v2")] Upgrade(UpgradeArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -130,12 +116,18 @@ async fn main() {
     let cluster = args.rpc.unwrap_or(cli_config.json_rpc_url);
     let default_keypair = args.keypair.unwrap_or(cli_config.keypair_path);
     let rpc_client = RpcClient::new_with_commitment(cluster, CommitmentConfig::confirmed());
+    let send_client = RpcClient::new(
+        "https://mainnet.block-engine.jito.wtf/api/v1/transactions".to_string()
+    );
 
-    let miner = Arc::new(Miner::new(
-        Arc::new(rpc_client),
-        args.priority_fee,
-        Some(default_keypair),
-    ));
+    let miner = Arc::new(
+        Miner::new(
+            Arc::new(rpc_client),
+            args.priority_fee,
+            Some(default_keypair),
+            Arc::new(send_client)
+        )
+    );
 
     // Execute user command.
     match args.command {
@@ -181,18 +173,22 @@ impl Miner {
         rpc_client: Arc<RpcClient>,
         priority_fee: u64,
         keypair_filepath: Option<String>,
+        send_client: Arc<RpcClient>
     ) -> Self {
         Self {
             rpc_client,
             keypair_filepath,
             priority_fee,
+            send_client,
         }
     }
 
     pub fn signer(&self) -> Keypair {
         match self.keypair_filepath.clone() {
-            Some(filepath) => read_keypair_file(filepath.clone())
-                .expect(format!("No keypair found at {}", filepath).as_str()),
+            Some(filepath) =>
+                read_keypair_file(filepath.clone()).expect(
+                    format!("No keypair found at {}", filepath).as_str()
+                ),
             None => panic!("No keypair provided"),
         }
     }

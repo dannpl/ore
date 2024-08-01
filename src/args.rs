@@ -1,4 +1,4 @@
-use clap::{arg, Parser};
+use clap::{ arg, Parser };
 
 #[derive(Parser, Debug)]
 pub struct BalanceArgs {
@@ -27,18 +27,10 @@ pub struct BussesArgs {}
 
 #[derive(Parser, Debug)]
 pub struct ClaimArgs {
-    #[arg(
-        long,
-        value_name = "AMOUNT",
-        help = "The amount of rewards to claim. Defaults to max."
-    )]
+    #[arg(long, value_name = "AMOUNT", help = "The amount of rewards to claim. Defaults to max.")]
     pub amount: Option<f64>,
 
-    #[arg(
-        long,
-        value_name = "WALLET_ADDRESS",
-        help = "Wallet to receive claimed tokens."
-    )]
+    #[arg(long, value_name = "WALLET_ADDRESS", help = "Wallet to receive claimed tokens.")]
     pub to: Option<String>,
 }
 
@@ -83,25 +75,11 @@ pub struct RewardsArgs {}
 
 #[derive(Parser, Debug)]
 pub struct StakeArgs {
-    #[arg(
-        long,
-        value_name = "AMOUNT",
-        help = "The amount of Ore to stake. Defaults to max."
-    )]
+    #[arg(long, value_name = "AMOUNT", help = "The amount of Ore to stake. Defaults to max.")]
     pub amount: Option<f64>,
 
-    #[arg(
-        long,
-        value_name = "TOKEN_ACCOUNT_ADDRESS",
-        help = "Token account to send Ore from."
-    )]
+    #[arg(long, value_name = "TOKEN_ACCOUNT_ADDRESS", help = "Token account to send Ore from.")]
     pub sender: Option<String>,
-}
-
-#[cfg(feature = "admin")]
-#[derive(Parser, Debug)]
-pub struct UpdateAdminArgs {
-    pub new_admin: String,
 }
 
 #[derive(Parser, Debug)]

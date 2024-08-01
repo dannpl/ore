@@ -5,8 +5,9 @@ use spl_token::amount_to_ui_amount;
 use crate::{
     args::ClaimArgs,
     send_and_confirm::ComputeBudget,
-    utils::{ask_confirm, get_proof_with_authority},
+    utils::{ ask_confirm, get_proof_with_authority },
     Miner,
+    DEFAULT_JITO_TIP,
 };
 
 impl Miner {
@@ -16,13 +17,20 @@ impl Miner {
         let proof = get_proof_with_authority(&self.rpc_client, signer.pubkey()).await;
 
         // Confirm the user wants to close.
-        if !ask_confirm(
-            format!("{} You have {} ORE staked in this account.\nAre you sure you want to {}close this account? [Y/n]", 
-                "WARNING".yellow(),
-                amount_to_ui_amount(proof.balance, ore_api::consts::TOKEN_DECIMALS),
-                if proof.balance.gt(&0) { "claim your stake and "} else { "" }
-            ).as_str()
-        ) {
+        if
+            !ask_confirm(
+                format!(
+                    "{} You have {} ORE staked in this account.\nAre you sure you want to {}close this account? [Y/n]",
+                    "WARNING".yellow(),
+                    amount_to_ui_amount(proof.balance, ore_api::consts::TOKEN_DECIMALS),
+                    if proof.balance.gt(&0) {
+                        "claim your stake and "
+                    } else {
+                        ""
+                    }
+                ).as_str()
+            )
+        {
             return;
         }
 
@@ -31,14 +39,11 @@ impl Miner {
             self.claim(ClaimArgs {
                 amount: None,
                 to: None,
-            })
-            .await;
+            }).await;
         }
 
         // Submit close transaction
         let ix = ore_api::instruction::close(signer.pubkey());
-        self.send_and_confirm(&[ix], ComputeBudget::Dynamic, false)
-            .await
-            .ok();
+        self.send_and_confirm(&[ix], ComputeBudget::Dynamic, DEFAULT_JITO_TIP).await.ok();
     }
 }

@@ -59,15 +59,15 @@ impl Miner {
                 final_ixs.push(ComputeBudgetInstruction::set_compute_unit_limit(cus));
             }
         }
-        final_ixs.push(
-            transfer(
-                &signer.pubkey(),
-                &Pubkey::from_str(
-                    &tips.choose(&mut rand::thread_rng()).unwrap().to_string()
-                ).unwrap(),
-                tip
-            )
-        );
+        // final_ixs.push(
+        //     transfer(
+        //         &signer.pubkey(),
+        //         &Pubkey::from_str(
+        //             &tips.choose(&mut rand::thread_rng()).unwrap().to_string()
+        //         ).unwrap(),
+        //         tip
+        //     )
+        // );
         final_ixs.push(ComputeBudgetInstruction::set_compute_unit_price(self.priority_fee));
         final_ixs.extend_from_slice(ixs);
 
@@ -89,7 +89,7 @@ impl Miner {
 
         loop {
             progress_bar.set_message(format!("Submitting transaction..."));
-            match send_client.send_transaction_with_config(&tx, send_cfg).await {
+            match client.send_transaction_with_config(&tx, send_cfg).await {
                 Ok(sig) => {
                     progress_bar.finish_with_message(format!("Sent: {}", sig));
                     return Ok(sig);

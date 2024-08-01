@@ -84,7 +84,7 @@ impl Miner {
             // Submit most difficult hash
             let mut compute_budget = 500_000;
 
-            if hashs == 3 {
+            if hashs == 5 {
                 current_tip = *tip.read().await;
 
                 ixs.push(ore_api::instruction::auth(proof_pubkey(signer.pubkey())));

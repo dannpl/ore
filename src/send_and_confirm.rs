@@ -2,10 +2,7 @@ use std::str::FromStr;
 use rand::prelude::SliceRandom;
 use colored::*;
 use solana_client::{ client_error::Result as ClientResult, rpc_config::RpcSendTransactionConfig };
-use solana_program::{
-    instruction::Instruction,
-    native_token::{ lamports_to_sol, sol_to_lamports },
-};
+use solana_program::instruction::Instruction;
 
 use solana_rpc_client::spinner;
 use solana_sdk::{
@@ -19,8 +16,6 @@ use solana_sdk::{
 use solana_transaction_status::UiTransactionEncoding;
 
 use crate::Miner;
-
-const MIN_SOL_BALANCE: f64 = 0.005;
 
 const RPC_RETRIES: usize = 0;
 const _SIMULATION_RETRIES: usize = 4;
@@ -41,18 +36,6 @@ impl Miner {
         let signer = self.signer();
         let client = self.rpc_client.clone();
         let send_client = self.send_client.clone();
-
-        // Return error, if balance is zero
-        if let Ok(balance) = client.get_balance(&signer.pubkey()).await {
-            if balance <= sol_to_lamports(MIN_SOL_BALANCE) {
-                panic!(
-                    "{} Insufficient balance: {} SOL\nPlease top up with at least {} SOL",
-                    "ERROR".bold().red(),
-                    lamports_to_sol(balance),
-                    MIN_SOL_BALANCE
-                );
-            }
-        }
 
         let tips = [
             "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",

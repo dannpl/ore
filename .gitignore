@@ -2,3 +2,6 @@
 output.log
 key.json
 config.json
+key*.json
+node_modules
+ecosystem.config.js

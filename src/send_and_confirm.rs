@@ -35,18 +35,7 @@ impl Miner {
         let progress_bar = spinner::new_progress_bar();
         let signer = self.signer();
         let client = self.rpc_client.clone();
-        let send_client = self.send_client.clone();
-
-        let tips = [
-            "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
-            "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
-            "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-            "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
-            "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
-            "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
-            "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
-            "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
-        ];
+        let send_client = if tip > 0 { self.send_client.clone() } else { self.rpc_client.clone() };
 
         // Set compute units
         let mut final_ixs = vec![];
@@ -59,15 +48,30 @@ impl Miner {
                 final_ixs.push(ComputeBudgetInstruction::set_compute_unit_limit(cus));
             }
         }
-        // final_ixs.push(
-        //     transfer(
-        //         &signer.pubkey(),
-        //         &Pubkey::from_str(
-        //             &tips.choose(&mut rand::thread_rng()).unwrap().to_string()
-        //         ).unwrap(),
-        //         tip
-        //     )
-        // );
+
+        if tip > 0 {
+            let tips = [
+                "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+                "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+                "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+                "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
+                "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
+                "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
+                "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+                "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
+            ];
+
+            final_ixs.push(
+                transfer(
+                    &signer.pubkey(),
+                    &Pubkey::from_str(
+                        &tips.choose(&mut rand::thread_rng()).unwrap().to_string()
+                    ).unwrap(),
+                    tip
+                )
+            );
+        }
+
         final_ixs.push(ComputeBudgetInstruction::set_compute_unit_price(self.priority_fee));
         final_ixs.extend_from_slice(ixs);
 
@@ -89,7 +93,7 @@ impl Miner {
 
         loop {
             progress_bar.set_message(format!("Submitting transaction..."));
-            match client.send_transaction_with_config(&tx, send_cfg).await {
+            match send_client.send_transaction_with_config(&tx, send_cfg).await {
                 Ok(sig) => {
                     progress_bar.finish_with_message(format!("Sent: {}", sig));
                     return Ok(sig);

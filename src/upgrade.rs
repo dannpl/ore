@@ -1,11 +1,12 @@
-use colored::*;
+use std::str::FromStr;
+
+use ore_api::consts::MINT_ADDRESS;
 use solana_sdk::{ pubkey::Pubkey, signer::Signer };
-use spl_token::amount_to_ui_amount;
 
 use crate::{
     cu_limits::CU_LIMIT_UPGRADE,
     send_and_confirm::ComputeBudget,
-    utils::{ amount_f64_to_u64_v1, ask_confirm },
+    utils::amount_f64_to_u64_v1,
     Miner,
     UpgradeArgs,
     DEFAULT_JITO_TIP,
@@ -17,6 +18,8 @@ impl Miner {
         let beneficiary = self.get_or_initialize_ata().await;
         let (sender, sender_balance) = self.get_ata_v1().await;
 
+        println!("{}", MINT_ADDRESS);
+
         let amount_f64 = match args.amount {
             Some(f64) => f64,
             None => {
@@ -25,18 +28,6 @@ impl Miner {
             }
         };
         let amount = amount_f64_to_u64_v1(amount_f64);
-        let amount_ui = amount_to_ui_amount(amount, ore_api::consts::TOKEN_DECIMALS_V1);
-
-        if
-            !ask_confirm(
-                format!(
-                    "\n You are about to upgrade {}. \n\nAre you sure you want to continue? [Y/n]",
-                    format!("{} ORE", amount_ui).bold()
-                ).as_str()
-            )
-        {
-            return;
-        }
 
         let ix = ore_api::instruction::upgrade(signer.pubkey(), beneficiary, sender, amount);
         match
@@ -93,7 +84,7 @@ impl Miner {
         // Derive assoicated token address (ata)
         let token_account_pubkey = spl_associated_token_account::get_associated_token_address(
             &signer.pubkey(),
-            &ore_api::consts::MINT_ADDRESS
+            &Pubkey::from_str("oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp").unwrap()
         );
 
         // Check if ata already exists or init
@@ -102,7 +93,7 @@ impl Miner {
             let ix = spl_associated_token_account::instruction::create_associated_token_account(
                 &signer.pubkey(),
                 &signer.pubkey(),
-                &ore_api::consts::MINT_ADDRESS,
+                &Pubkey::from_str("oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp").unwrap(),
                 &spl_token::id()
             );
             self.send_and_confirm(&[ix], ComputeBudget::Dynamic, DEFAULT_JITO_TIP).await.ok();

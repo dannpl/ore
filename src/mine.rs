@@ -36,6 +36,8 @@ impl Miner {
         let signer = self.signer();
         self.open().await;
 
+        println!("Mining with {} threads", signer.pubkey().to_string());
+
         let tip = Arc::new(RwLock::new(0_u64));
         let tip_clone = Arc::clone(&tip);
         let mut current_tip = 0;
@@ -43,31 +45,31 @@ impl Miner {
         // Check num threads
         self.check_num_cores(args.threads);
 
-        let url = "ws://bundles-api-rest.jito.wtf/api/v1/bundles/tip_stream";
-        let (ws_stream, _) = connect_async(url).await.unwrap();
-        let (_, mut read) = ws_stream.split();
+        if self.jito {
+            let url = "ws://bundles-api-rest.jito.wtf/api/v1/bundles/tip_stream";
+            let (ws_stream, _) = connect_async(url).await.unwrap();
+            let (_, mut read) = ws_stream.split();
 
-        tokio::spawn(async move {
-            while let Some(message) = read.next().await {
-                if let Ok(Message::Text(text)) = message {
-                    if let Ok(tips) = serde_json::from_str::<Vec<Tip>>(&text) {
-                        for item in tips {
-                            let mut tip = tip_clone.write().await;
-                            *tip = (item.landed_tips_50th_percentile * (10_f64).powf(9.0)) as u64;
+            tokio::spawn(async move {
+                while let Some(message) = read.next().await {
+                    if let Ok(Message::Text(text)) = message {
+                        if let Ok(tips) = serde_json::from_str::<Vec<Tip>>(&text) {
+                            for item in tips {
+                                let mut tip = tip_clone.write().await;
+                                *tip = (item.landed_tips_50th_percentile *
+                                    (10_f64).powf(9.0)) as u64;
+                            }
                         }
                     }
                 }
-            }
-        });
-
-        let mut ixs = vec![];
-        let mut hashs = 0;
+            });
+        }
 
         // Start mining loop
         loop {
             // Fetch proof
             let proof = get_proof_with_authority(&self.rpc_client, signer.pubkey()).await;
-            println!("\nStake balance: {} ORE", amount_u64_to_string(proof.balance));
+            println!("\nStake balance: {} ORE", amount_u64_to_string(proof.balance).green());
 
             // Calc cutoff time
             let cutoff_time = self.get_cutoff(proof, args.buffer_time).await;
@@ -84,33 +86,26 @@ impl Miner {
             // Submit most difficult hash
             let mut compute_budget = 500_000;
 
-            if hashs == 5 {
-                current_tip = *tip.read().await;
+            current_tip = *tip.read().await;
 
-                ixs.push(ore_api::instruction::auth(proof_pubkey(signer.pubkey())));
+            let mut ixs = vec![];
 
-                if self.should_reset(config).await {
-                    compute_budget += 100_000;
-                    ixs.push(ore_api::instruction::reset(signer.pubkey()));
-                }
+            ixs.push(ore_api::instruction::auth(proof_pubkey(signer.pubkey())));
 
-                println!("Jito Tip: {:?}", ((current_tip as f64) / (10_f64).powf(9.0)).to_string());
-
-                self.send_and_confirm(
-                    &ixs,
-                    ComputeBudget::Fixed(compute_budget),
-                    current_tip.clone()
-                ).await.ok();
-
-                hashs = 0;
-                ixs.clear();
+            if self.should_reset(config).await {
+                compute_budget += 100_000;
+                ixs.push(ore_api::instruction::reset(signer.pubkey()));
             }
 
             ixs.push(
                 ore_api::instruction::mine(signer.pubkey(), signer.pubkey(), find_bus(), solution)
             );
 
-            hashs += 1;
+            self.send_and_confirm(
+                &ixs,
+                ComputeBudget::Fixed(compute_budget),
+                current_tip.clone()
+            ).await.ok();
         }
     }
 

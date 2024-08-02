@@ -28,6 +28,7 @@ struct Miner {
     pub priority_fee: u64,
     pub rpc_client: Arc<RpcClient>,
     pub send_client: Arc<RpcClient>,
+    pub jito: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -92,6 +93,9 @@ struct Args {
     )]
     priority_fee: u64,
 
+    #[arg(long, value_name = "JITO", help = "USE JITO", global = true)]
+    jito: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -120,12 +124,15 @@ async fn main() {
         "https://mainnet.block-engine.jito.wtf/api/v1/transactions".to_string()
     );
 
+    println!("Using RPC cluster: {}", args.jito);
+
     let miner = Arc::new(
         Miner::new(
             Arc::new(rpc_client),
             args.priority_fee,
             Some(default_keypair),
-            Arc::new(send_client)
+            Arc::new(send_client),
+            args.jito
         )
     );
 
@@ -161,10 +168,6 @@ async fn main() {
         Commands::Upgrade(args) => {
             miner.upgrade(args).await;
         }
-        #[cfg(feature = "admin")]
-        Commands::Initialize(_) => {
-            miner.initialize().await;
-        }
     }
 }
 
@@ -173,13 +176,15 @@ impl Miner {
         rpc_client: Arc<RpcClient>,
         priority_fee: u64,
         keypair_filepath: Option<String>,
-        send_client: Arc<RpcClient>
+        send_client: Arc<RpcClient>,
+        jito: bool
     ) -> Self {
         Self {
             rpc_client,
             keypair_filepath,
             priority_fee,
             send_client,
+            jito,
         }
     }
 

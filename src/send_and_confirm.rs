@@ -35,7 +35,11 @@ impl Miner {
         let progress_bar = spinner::new_progress_bar();
         let signer = self.signer();
         let client = self.rpc_client.clone();
-        let send_client = if tip > 0 { self.send_client.clone() } else { self.rpc_client.clone() };
+        let mut send_client = self.rpc_client.clone();
+
+        if tip > 0 {
+            send_client = self.send_client.clone();
+        }
 
         // Set compute units
         let mut final_ixs = vec![];

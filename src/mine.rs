@@ -36,8 +36,6 @@ impl Miner {
         let signer = self.signer();
         self.open().await;
 
-        println!("Mining with {} threads", signer.pubkey().to_string());
-
         let tip = Arc::new(RwLock::new(0_u64));
         let tip_clone = Arc::clone(&tip);
         let mut current_tip = 0;

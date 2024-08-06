@@ -157,10 +157,10 @@ impl Miner {
                                 let mut bh = best_hash.lock().unwrap();
                                 *bh = hx;
 
-                                progress_bar.clone().set_message(format!(
+                                println!(
                                     "Difficulty: {}",
                                     format!("{:?}", difficulty).bold().green()
-                                ));
+                                )
                             }
                         }
 

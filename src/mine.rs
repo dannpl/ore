@@ -93,9 +93,7 @@ impl Miner {
 
                 progress_bar.set_message(format!(
                     "Mining in {} sec",
-                    format!("{:?}", cutt.to_string().bold().green())
-                        .bold()
-                        .green()
+                    format!("{:?}", cutt).bold().green()
                 ))
             }
 

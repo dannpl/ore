@@ -25,7 +25,7 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use crate::{
     args::MineArgs,
     send_and_confirm::ComputeBudget,
-    utils::{amount_u64_to_string, get_clock, get_proof_with_authority, proof_pubkey},
+    utils::{amount_u64_to_string, get_clock, get_config, get_proof_with_authority, proof_pubkey},
     Miner,
 };
 
@@ -80,6 +80,13 @@ impl Miner {
             println!(
                 "\nStake balance: {} ORE",
                 amount_u64_to_string(proof.balance).green()
+            );
+            let config = get_config(&self.rpc_client).await;
+
+            println!(
+                "\nStake: {} ORE\n  Multiplier: {:12}x",
+                amount_u64_to_string(proof.balance),
+                calculate_multiplier(proof.balance, config.top_balance)
             );
 
             let cutoff_time = self.get_cutoff(proof).await;
@@ -225,4 +232,8 @@ impl Miner {
 fn find_bus() -> Pubkey {
     let i = rand::thread_rng().gen_range(0..BUS_COUNT);
     BUS_ADDRESSES[i]
+}
+
+fn calculate_multiplier(balance: u64, top_balance: u64) -> f64 {
+    1.0 + (balance as f64 / top_balance as f64).min(1.0f64)
 }

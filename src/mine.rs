@@ -85,12 +85,18 @@ impl Miner {
             let cutoff_time = self.get_cutoff(proof).await;
 
             let mut cutt = cutoff_time;
+            let progress_bar = spinner::new_progress_bar();
 
             while cutt > 0 {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 cutt -= 1;
 
-                println!("Mining in {} sec", cutt.to_string().bold().green(),);
+                progress_bar.set_message(format!(
+                    "Mining in {} sec",
+                    format!("{:?}", cutt.to_string().bold().green())
+                        .bold()
+                        .green()
+                ))
             }
 
             let solution = Self::find_hash_par(proof, args.threads, args.diff as u32).await;

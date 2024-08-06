@@ -134,8 +134,8 @@ impl Miner {
             .map(|i| {
                 let proof = proof.clone();
                 let best_difficulty = best_difficulty.clone();
-                let best_nonce = best_nonce.clone();
-                let best_hash = best_hash.clone();
+                let best_nonce = Arc::clone(&best_nonce);
+                let best_hash = Arc::clone(&best_hash);
                 let progress_bar = progress_bar.clone();
 
                 std::thread::spawn(move || {
@@ -157,10 +157,10 @@ impl Miner {
                                 let mut bh = best_hash.lock().unwrap();
                                 *bh = hx;
 
-                                println!(
+                                progress_bar.set_message(format!(
                                     "Difficulty: {}",
                                     format!("{:?}", difficulty).bold().green()
-                                )
+                                ));
                             }
                         }
 

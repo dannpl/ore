@@ -2027,13 +2027,25 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7baab56125e25686df467fe470785512329883aab42696d661247aca2a2896e4"
+dependencies = [
+ "console",
+ "lazy_static",
+ "number_prefix 0.3.0",
+ "regex",
+]
+
+[[package]]
+name = "indicatif"
 version = "0.17.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "763a5a8f45087d6bcea4222e7b72c291a054edf80e4ef6efd2a4979878c7bea3"
 dependencies = [
  "console",
  "instant",
- "number_prefix",
+ "number_prefix 0.4.0",
  "portable-atomic",
  "unicode-width",
 ]
@@ -2508,6 +2520,12 @@ dependencies = [
 
 [[package]]
 name = "number_prefix"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17b02fc0ff9a9e4b35b3342880f48e896ebf69f2967921fe8646bf5b7125956a"
+
+[[package]]
+name = "number_prefix"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
@@ -2561,6 +2579,7 @@ dependencies = [
  "colored",
  "drillx",
  "futures",
+ "indicatif 0.15.0",
  "num_cpus",
  "ore-api",
  "ore-utils",
@@ -3617,7 +3636,7 @@ dependencies = [
  "futures",
  "futures-util",
  "indexmap 2.3.0",
- "indicatif",
+ "indicatif 0.17.8",
  "log",
  "quinn",
  "rayon",
@@ -3972,7 +3991,7 @@ dependencies = [
  "base64 0.21.7",
  "bincode",
  "bs58 0.4.0",
- "indicatif",
+ "indicatif 0.17.8",
  "log",
  "reqwest",
  "semver",
@@ -4155,7 +4174,7 @@ dependencies = [
  "bincode",
  "futures-util",
  "indexmap 2.3.0",
- "indicatif",
+ "indicatif 0.17.8",
  "log",
  "rayon",
  "solana-connection-cache",

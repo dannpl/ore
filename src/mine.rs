@@ -99,6 +99,8 @@ impl Miner {
                 ))
             }
 
+            progress_bar.finish();
+
             let solution = Self::find_hash_par(proof, args.threads, args.diff as u32).await;
 
             let compute_budget = 500_000;

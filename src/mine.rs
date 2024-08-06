@@ -8,16 +8,15 @@ use ore_api::{
     consts::{BUS_ADDRESSES, BUS_COUNT},
     state::Proof,
 };
-use rand::SeedableRng;
-use rand::{Rng, RngCore};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use solana_program::pubkey::Pubkey;
 use solana_rpc_client::spinner;
 use solana_sdk::signer::Signer;
-use std::thread;
-use std::{
-    ops::Mul,
-    sync::{mpsc, Arc, Mutex},
+use std::sync::atomic::AtomicU32;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
 };
 use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
@@ -94,7 +93,7 @@ impl Miner {
                 println!("Mining in {} sec", cutt.to_string().bold().green(),);
             }
 
-            let solution = Self::find_hash_par(proof, args.threads, args.diff as u32);
+            let solution = Self::find_hash_par(proof, args.threads, args.diff as u32).await;
 
             let compute_budget = 500_000;
 
@@ -123,75 +122,72 @@ impl Miner {
         }
     }
 
-    fn find_hash_par(proof: Proof, num_threads: u64, min_difficulty: u32) -> Solution {
-        let proof = Arc::new(proof);
+    async fn find_hash_par(proof: Proof, threads: u64, min_difficulty: u32) -> Solution {
+        // Dispatch job to each thread
         let progress_bar = Arc::new(spinner::new_progress_bar());
 
-        let (tx, rx) = mpsc::channel();
-
+        let best_difficulty = Arc::new(AtomicU32::new(0));
+        let best_nonce = Arc::new(AtomicU64::new(0));
         let best_hash = Arc::new(Mutex::new(Hash::default()));
-        let best_difficulty = Arc::new(Mutex::new(0));
-        let best_nonce = Arc::new(Mutex::new(0u64));
-        let found_solution = Arc::new(Mutex::new(false));
 
-        for thread_id in 0..num_threads {
-            let proof = Arc::clone(&proof);
-            let tx = tx.clone();
-            let best_hash = Arc::clone(&best_hash);
-            let best_difficulty = Arc::clone(&best_difficulty);
-            let best_nonce = Arc::clone(&best_nonce);
-            let found_solution = Arc::clone(&found_solution);
-            let mut memory = equix::SolverMemory::new();
+        let handles: Vec<_> = (0..threads)
+            .map(|i| {
+                let proof = proof.clone();
+                let best_difficulty = Arc::clone(&best_difficulty);
+                let best_nonce = Arc::clone(&best_nonce);
+                let best_hash = Arc::clone(&best_hash);
 
-            thread::spawn(move || loop {
-                if *found_solution.lock().unwrap() {
-                    break;
-                }
+                std::thread::spawn(move || {
+                    let mut memory = equix::SolverMemory::new();
+                    let mut nonce = u64::MAX.saturating_div(threads).saturating_mul(i);
 
-                let thread_seed = rand::thread_rng().next_u64() ^ (thread_id * 369) as u64;
-                let mut rng = rand::rngs::StdRng::seed_from_u64(thread_seed);
+                    loop {
+                        let current_best = best_difficulty.load(Ordering::Relaxed);
 
-                let nonce = rng.gen::<u64>();
+                        if let Ok(hx) = drillx::hash_with_memory(
+                            &mut memory,
+                            &proof.challenge,
+                            &nonce.to_le_bytes(),
+                        ) {
+                            let difficulty = hx.difficulty();
+                            if difficulty > current_best {
+                                best_nonce.store(nonce, Ordering::Relaxed);
+                                best_difficulty.store(difficulty, Ordering::Relaxed);
+                                let mut bh = best_hash.lock().unwrap();
+                                *bh = hx;
 
-                if let Ok(hx) =
-                    drillx::hash_with_memory(&mut memory, &proof.challenge, &nonce.to_le_bytes())
-                {
-                    let difficulty = hx.difficulty();
-
-                    let mut best_diff = best_difficulty.lock().unwrap();
-
-                    if difficulty > *best_diff {
-                        println!("Difficulty: {}", format!("{:?}", difficulty).bold().green());
-
-                        *best_diff = difficulty;
-
-                        let mut best_h = best_hash.lock().unwrap();
-                        *best_h = hx;
-
-                        let mut best_n = best_nonce.lock().unwrap();
-                        *best_n = nonce;
-
-                        if difficulty >= min_difficulty {
-                            println!("Solution found by thread {}", thread_id);
-                            *found_solution.lock().unwrap() = true;
-
-                            let _ = tx.send(());
-
-                            break;
+                                println!(
+                                    "Difficulty: {}",
+                                    format!("{:?}", difficulty).bold().green()
+                                );
+                            }
                         }
+
+                        if best_difficulty.load(Ordering::Relaxed) >= min_difficulty {
+                            return;
+                        }
+
+                        nonce += 1;
                     }
-                }
-            });
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().unwrap();
         }
 
-        rx.recv().unwrap();
+        let final_best_hash = best_hash.lock().unwrap();
+        let final_best_nonce = best_nonce.load(Ordering::Relaxed);
+        let final_best_difficulty = best_difficulty.load(Ordering::Relaxed);
 
-        progress_bar.finish_with_message("Mining completed");
+        progress_bar.finish_with_message(format!(
+            "Best hash: {} (difficulty: {})",
+            bs58::encode(final_best_hash.h).into_string(),
+            final_best_difficulty
+        ));
 
-        let best_hash = best_hash.lock().unwrap();
-        let best_nonce = best_nonce.lock().unwrap();
-
-        Solution::new(best_hash.d, best_nonce.to_le_bytes())
+        Solution::new(final_best_hash.d, final_best_nonce.to_le_bytes())
     }
 
     pub fn check_num_cores(&self, threads: u64) {

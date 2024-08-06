@@ -148,10 +148,7 @@ impl Miner {
                     break;
                 }
 
-                let thread_seed = rand::thread_rng()
-                    .next_u64()
-                    .mul(rand::thread_rng().next_u64())
-                    ^ (thread_id * 369) as u64;
+                let thread_seed = rand::thread_rng().next_u64() ^ (thread_id * 369) as u64;
                 let mut rng = rand::rngs::StdRng::seed_from_u64(thread_seed);
 
                 let nonce = rng.gen::<u64>();

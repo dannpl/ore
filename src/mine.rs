@@ -14,8 +14,11 @@ use serde::{Deserialize, Serialize};
 use solana_program::pubkey::Pubkey;
 use solana_rpc_client::spinner;
 use solana_sdk::signer::Signer;
-use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+use std::{
+    ops::Mul,
+    sync::{mpsc, Arc, Mutex},
+};
 use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
@@ -145,7 +148,10 @@ impl Miner {
                     break;
                 }
 
-                let thread_seed = rand::thread_rng().next_u64() ^ thread_id * 3.69 as u64;
+                let thread_seed = rand::thread_rng()
+                    .next_u64()
+                    .mul(rand::thread_rng().next_u64())
+                    ^ (thread_id * 369) as u64;
                 let mut rng = rand::rngs::StdRng::seed_from_u64(thread_seed);
 
                 let nonce = rng.gen::<u64>();

@@ -133,9 +133,10 @@ impl Miner {
         let handles: Vec<_> = (0..threads)
             .map(|i| {
                 let proof = proof.clone();
-                let best_difficulty = Arc::clone(&best_difficulty);
-                let best_nonce = Arc::clone(&best_nonce);
-                let best_hash = Arc::clone(&best_hash);
+                let best_difficulty = best_difficulty.clone();
+                let best_nonce = best_nonce.clone();
+                let best_hash = best_hash.clone();
+                let progress_bar = progress_bar.clone();
 
                 std::thread::spawn(move || {
                     let mut memory = equix::SolverMemory::new();
@@ -156,10 +157,10 @@ impl Miner {
                                 let mut bh = best_hash.lock().unwrap();
                                 *bh = hx;
 
-                                println!(
+                                progress_bar.clone().set_message(format!(
                                     "Difficulty: {}",
                                     format!("{:?}", difficulty).bold().green()
-                                );
+                                ));
                             }
                         }
 

@@ -70,6 +70,15 @@ impl Miner {
             let config = get_config(&self.rpc_client).await;
 
             println!(
+                "\nHashes: {} Rewards: {}",
+                proof.total_hashes.to_string().bold().blue(),
+                (proof.total_rewards as f64 / 10u64.pow(11) as f64)
+                    .to_string()
+                    .bold()
+                    .blue()
+            );
+
+            println!(
                 "\nStake: {} ORE Multiplier: {}x",
                 amount_u64_to_string(proof.balance).bold().green(),
                 format!(

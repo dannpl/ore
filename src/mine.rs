@@ -9,7 +9,7 @@ use ore_api::{
     state::Proof,
 };
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use rayon::prelude::*;
 use solana_program::pubkey::Pubkey;
 use solana_rpc_client::spinner;
 use solana_sdk::signer::Signer;
@@ -26,21 +26,12 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use crate::{
     args::MineArgs,
     send_and_confirm::ComputeBudget,
-    utils::{amount_u64_to_string, get_clock, get_config, get_proof_with_authority, proof_pubkey},
+    utils::{
+        amount_u64_to_string, get_clock, get_config, get_proof_with_authority, proof_pubkey, Tip,
+    },
     Miner,
 };
 use crossbeam::channel;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Tip {
-    pub time: String,
-    pub landed_tips_25th_percentile: f64,
-    pub landed_tips_50th_percentile: f64,
-    pub landed_tips_75th_percentile: f64,
-    pub landed_tips_95th_percentile: f64,
-    pub landed_tips_99th_percentile: f64,
-    pub ema_landed_tips_50th_percentile: f64,
-}
 
 impl Miner {
     pub async fn mine(&self, args: MineArgs) {
@@ -118,10 +109,12 @@ impl Miner {
         let best_nonce = Arc::new(AtomicU64::new(0));
         let best_hash = Arc::new(Mutex::new(Hash::default()));
         let (sender, _receiver) = channel::unbounded();
-        let timeout = Duration::from_secs(60);
+        let timeout = Duration::from_secs(30);
         let start_time = Instant::now();
+        let rt = tokio::runtime::Handle::current();
 
         let handles: Vec<_> = (0..threads)
+            .into_par_iter()
             .map(|i| {
                 let proof = proof.clone();
                 let best_difficulty = Arc::clone(&best_difficulty);
@@ -130,7 +123,7 @@ impl Miner {
                 let progress_bar = Arc::clone(&progress_bar);
                 let sender = sender.clone();
 
-                std::thread::spawn(move || {
+                rt.spawn_blocking(move || {
                     let mut memory = equix::SolverMemory::new();
                     let mut nonce = u64::MAX.saturating_div(threads).saturating_mul(i);
 
@@ -171,7 +164,7 @@ impl Miner {
             .collect();
 
         for handle in handles {
-            if let Err(err) = handle.join() {
+            if let Err(err) = handle.await {
                 eprintln!("Thread error: {:?}", err);
             }
         }
@@ -218,8 +211,7 @@ impl Miner {
     }
 
     pub fn check_num_cores(&self, threads: u64) {
-        // Check num threads
-        let num_cores = num_cpus::get() as u64;
+        let num_cores = std::thread::available_parallelism().unwrap().get() as u64;
         if threads.gt(&num_cores) {
             println!(
                 "{} Number of threads ({}) exceeds available cores ({})",

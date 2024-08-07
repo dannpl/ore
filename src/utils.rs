@@ -8,10 +8,22 @@ use ore_api::{
     state::{Config, Proof, Treasury},
 };
 use ore_utils::AccountDeserialize;
+use serde::{Deserialize, Serialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_program::{pubkey::Pubkey, sysvar};
 use solana_sdk::clock::Clock;
 use spl_associated_token_account::get_associated_token_address;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Tip {
+    pub time: String,
+    pub landed_tips_25th_percentile: f64,
+    pub landed_tips_50th_percentile: f64,
+    pub landed_tips_75th_percentile: f64,
+    pub landed_tips_95th_percentile: f64,
+    pub landed_tips_99th_percentile: f64,
+    pub ema_landed_tips_50th_percentile: f64,
+}
 
 pub async fn _get_treasury(client: &RpcClient) -> Treasury {
     let data = client

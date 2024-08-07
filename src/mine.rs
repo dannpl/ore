@@ -141,10 +141,10 @@ impl Miner {
         let handles: Vec<_> = (0..threads)
             .map(|i| {
                 let proof = proof.clone();
-                let best_difficulty = best_difficulty.clone();
+                let best_difficulty = Arc::clone(&best_difficulty);
                 let best_nonce = Arc::clone(&best_nonce);
                 let best_hash = Arc::clone(&best_hash);
-                let progress_bar = progress_bar.clone();
+                let progress_bar = Arc::clone(&progress_bar);
                 let sender = sender.clone();
 
                 std::thread::spawn(move || {
@@ -152,7 +152,12 @@ impl Miner {
                     let mut nonce = u64::MAX.saturating_div(threads).saturating_mul(i);
 
                     loop {
-                        let current_best = best_difficulty.load(Ordering::Relaxed);
+                        if best_difficulty.load(Ordering::Relaxed) >= min_difficulty
+                            || start_time.elapsed() > timeout
+                        {
+                            let _ = sender.send(());
+                            break;
+                        }
 
                         if let Ok(hx) = drillx::hash_with_memory(
                             &mut memory,
@@ -160,9 +165,12 @@ impl Miner {
                             &nonce.to_le_bytes(),
                         ) {
                             let difficulty = hx.difficulty();
+                            let current_best = best_difficulty.load(Ordering::Relaxed);
+
                             if difficulty > current_best {
                                 best_nonce.store(nonce, Ordering::Relaxed);
                                 best_difficulty.store(difficulty, Ordering::Relaxed);
+
                                 let mut bh = best_hash.lock().unwrap();
                                 *bh = hx;
 
@@ -173,13 +181,6 @@ impl Miner {
                             }
                         }
 
-                        if best_difficulty.load(Ordering::Relaxed) >= min_difficulty
-                            || start_time.elapsed() > timeout
-                        {
-                            let _ = sender.send(());
-                            return;
-                        }
-
                         nonce += 1;
                     }
                 })
@@ -187,7 +188,9 @@ impl Miner {
             .collect();
 
         for handle in handles {
-            handle.join().unwrap();
+            if let Err(err) = handle.join() {
+                eprintln!("Thread error: {:?}", err);
+            }
         }
 
         let final_best_hash = best_hash.lock().unwrap();

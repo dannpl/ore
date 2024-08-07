@@ -124,8 +124,6 @@ async fn main() {
         "https://mainnet.block-engine.jito.wtf/api/v1/transactions".to_string()
     );
 
-    println!("Using RPC cluster: {}", args.jito);
-
     let miner = Arc::new(
         Miner::new(
             Arc::new(rpc_client),

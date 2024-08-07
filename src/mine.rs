@@ -205,8 +205,8 @@ impl Miner {
 
         progress_bar.finish_with_message(format!(
             "Best hash: {} (difficulty: {})",
-            bs58::encode(final_best_hash.h).into_string(),
-            final_best_difficulty
+            format!("{:?}", final_best_hash.h).bold().green(),
+            format!("{:?}", final_best_difficulty).bold().green()
         ));
 
         Solution::new(final_best_hash.d, final_best_nonce.to_le_bytes())

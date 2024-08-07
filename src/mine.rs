@@ -196,8 +196,8 @@ impl Miner {
 
         if final_best_difficulty < min_difficulty {
             println!(
-                "{:?}",
-                format!("Difficulty not reached: {}", min_difficulty)
+                "{}",
+                format!("The min difficulty not reached: {}", min_difficulty)
                     .bold()
                     .red()
             );

@@ -106,16 +106,11 @@ impl Miner {
 
             progress_bar.finish();
 
-            let solution = Self::find_hash_par(proof, args.threads, args.diff, args.time).await;
-
-            if let Err(e) = solution {
-                println!("Error: {}", e.bold().red());
-                continue;
-            }
-
-            let current_tip = *tip.read().await;
+            let solution = Self::find_hash_par(proof, args.threads, args.diff).await;
 
             let mut ixs = vec![];
+
+            let current_tip = *tip.read().await;
 
             ixs.push(ore_api::instruction::auth(proof_pubkey(signer.pubkey())));
 
@@ -123,7 +118,7 @@ impl Miner {
                 signer.pubkey(),
                 signer.pubkey(),
                 find_bus(),
-                solution.unwrap(),
+                solution,
             ));
 
             self.send_and_confirm(&ixs, ComputeBudget::Fixed(500_000), current_tip.clone())
@@ -134,18 +129,13 @@ impl Miner {
         }
     }
 
-    async fn find_hash_par(
-        proof: Proof,
-        threads: u64,
-        min_difficulty: u32,
-        time: u64,
-    ) -> Result<Solution, String> {
+    async fn find_hash_par(proof: Proof, threads: u64, min_difficulty: u32) -> Solution {
         let progress_bar = Arc::new(spinner::new_progress_bar());
         let best_difficulty = Arc::new(AtomicU32::new(0));
         let best_nonce = Arc::new(AtomicU64::new(0));
         let best_hash = Arc::new(Mutex::new(Hash::default()));
-        let (sender, receiver) = channel::unbounded();
-        let timeout = Duration::from_secs(time);
+        let (sender, _receiver) = channel::unbounded();
+        let timeout = Duration::from_secs(60);
         let start_time = Instant::now();
 
         let handles: Vec<_> = (0..threads)
@@ -183,13 +173,10 @@ impl Miner {
                             }
                         }
 
-                        if start_time.elapsed() > timeout {
-                            let _ = sender.send("error");
-                            return;
-                        }
-
-                        if best_difficulty.load(Ordering::Relaxed) >= min_difficulty {
-                            let _ = sender.send("done");
+                        if best_difficulty.load(Ordering::Relaxed) >= min_difficulty
+                            || start_time.elapsed() > timeout
+                        {
+                            let _ = sender.send(());
                             return;
                         }
 
@@ -203,15 +190,18 @@ impl Miner {
             handle.join().unwrap();
         }
 
-        let msg_receiver = receiver.recv().unwrap();
-
-        if msg_receiver == "error" {
-            return Err("Min diff not reached, retrying...".to_string());
-        }
-
         let final_best_hash = best_hash.lock().unwrap();
         let final_best_nonce = best_nonce.load(Ordering::Relaxed);
         let final_best_difficulty = best_difficulty.load(Ordering::Relaxed);
+
+        if final_best_difficulty < min_difficulty {
+            println!(
+                "{:?}",
+                format!("Difficulty not reached: {}", min_difficulty)
+                    .bold()
+                    .red()
+            );
+        }
 
         progress_bar.finish_with_message(format!(
             "Best hash: {} (difficulty: {})",
@@ -219,10 +209,7 @@ impl Miner {
             final_best_difficulty
         ));
 
-        Ok(Solution::new(
-            final_best_hash.d,
-            final_best_nonce.to_le_bytes(),
-        ))
+        Solution::new(final_best_hash.d, final_best_nonce.to_le_bytes())
     }
 
     pub fn check_num_cores(&self, threads: u64) {

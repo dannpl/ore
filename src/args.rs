@@ -75,14 +75,6 @@ pub struct MineArgs {
         default_value = "12"
     )]
     pub diff: u32,
-
-    #[arg(
-        long,
-        value_name = "TIME",
-        help = "The time to request a new challenge",
-        default_value = "60"
-    )]
-    pub time: u64,
 }
 
 #[derive(Parser, Debug)]

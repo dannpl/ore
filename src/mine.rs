@@ -89,24 +89,7 @@ impl Miner {
                 .green()
             );
 
-            let cutoff_time = self.get_cutoff(proof).await;
-
-            let mut cutt = cutoff_time;
-            let progress_bar = spinner::new_progress_bar();
-
-            while cutt > 0 {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                cutt -= 1;
-
-                progress_bar.set_message(format!(
-                    "Mining in {} sec",
-                    format!("{:?}", cutt).bold().green()
-                ))
-            }
-
-            progress_bar.finish();
-
-            let solution = Self::find_hash_par(proof, args.threads, args.diff).await;
+            let solution = Self::find_hash_par(&self, proof, args.threads, args.diff).await;
 
             let mut ixs = vec![];
 
@@ -129,7 +112,7 @@ impl Miner {
         }
     }
 
-    async fn find_hash_par(proof: Proof, threads: u64, min_difficulty: u32) -> Solution {
+    async fn find_hash_par(&self, proof: Proof, threads: u64, min_difficulty: u32) -> Solution {
         let progress_bar = Arc::new(spinner::new_progress_bar());
         let best_difficulty = Arc::new(AtomicU32::new(0));
         let best_nonce = Arc::new(AtomicU64::new(0));
@@ -196,6 +179,23 @@ impl Miner {
         let final_best_hash = best_hash.lock().unwrap();
         let final_best_nonce = best_nonce.load(Ordering::Relaxed);
         let final_best_difficulty = best_difficulty.load(Ordering::Relaxed);
+
+        let cutoff_time = self.get_cutoff(proof).await;
+
+        let mut cutt = cutoff_time;
+        let cut_progress_bar = spinner::new_progress_bar();
+
+        while cutt > 0 {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            cutt -= 1;
+
+            cut_progress_bar.set_message(format!(
+                "Waiting {} sec to send",
+                format!("{:?}", cutt).bold().green()
+            ))
+        }
+
+        cut_progress_bar.finish();
 
         if final_best_difficulty < min_difficulty {
             println!(

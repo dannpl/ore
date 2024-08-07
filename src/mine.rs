@@ -206,14 +206,7 @@ impl Miner {
         let msg_receiver = receiver.recv().unwrap();
 
         if msg_receiver == "error" {
-            println!(
-                "MAX Diff {:}",
-                format!("{:?}", best_difficulty.load(Ordering::Relaxed))
-                    .bold()
-                    .blue()
-            );
-
-            return Err("Requesting new challenge".to_string());
+            return Err("Min diff not reached, retrying...".to_string());
         }
 
         let final_best_hash = best_hash.lock().unwrap();

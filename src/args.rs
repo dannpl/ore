@@ -61,7 +61,6 @@ pub struct MineArgs {
     // #[cfg(not(feature = "gpu"))]
     #[arg(
         long,
-        short,
         value_name = "THREAD_COUNT",
         help = "The number of CPU threads to allocate to mining",
         default_value = "1"
@@ -75,7 +74,15 @@ pub struct MineArgs {
         help = "The difficulty level to mine at",
         default_value = "12"
     )]
-    pub diff: u64,
+    pub diff: u32,
+
+    #[arg(
+        long,
+        value_name = "TIME",
+        help = "The time to request a new challenge",
+        default_value = "60"
+    )]
+    pub time: u64,
 }
 
 #[derive(Parser, Debug)]

@@ -18,6 +18,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
 };
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
@@ -28,6 +29,7 @@ use crate::{
     utils::{amount_u64_to_string, get_clock, get_config, get_proof_with_authority, proof_pubkey},
     Miner,
 };
+use crossbeam::channel;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Tip {
@@ -42,15 +44,13 @@ pub struct Tip {
 
 impl Miner {
     pub async fn mine(&self, args: MineArgs) {
-        // Register, if needed.
         let signer = self.signer();
+
         self.open().await;
 
         let tip = Arc::new(RwLock::new(0_u64));
         let tip_clone = Arc::clone(&tip);
-        let mut current_tip = 0;
 
-        // Check num threads
         self.check_num_cores(args.threads);
 
         if self.jito {
@@ -73,20 +73,20 @@ impl Miner {
             });
         }
 
-        // Start mining loop
         loop {
             let proof = get_proof_with_authority(&self.rpc_client, signer.pubkey()).await;
 
-            println!(
-                "\nStake balance: {} ORE",
-                amount_u64_to_string(proof.balance).green()
-            );
             let config = get_config(&self.rpc_client).await;
 
             println!(
-                "\nStake: {} ORE\n  Multiplier: {:12}x",
-                amount_u64_to_string(proof.balance),
-                calculate_multiplier(proof.balance, config.top_balance)
+                "\nStake: {} ORE Multiplier: {}x",
+                amount_u64_to_string(proof.balance).bold().green(),
+                format!(
+                    "{:?}",
+                    calculate_multiplier(proof.balance, config.top_balance)
+                )
+                .bold()
+                .green()
             );
 
             let cutoff_time = self.get_cutoff(proof).await;
@@ -106,11 +106,14 @@ impl Miner {
 
             progress_bar.finish();
 
-            let solution = Self::find_hash_par(proof, args.threads, args.diff as u32).await;
+            let solution = Self::find_hash_par(proof, args.threads, args.diff, args.time).await;
 
-            let compute_budget = 500_000;
+            if let Err(e) = solution {
+                println!("Error: {}", e.bold().red());
+                continue;
+            }
 
-            current_tip = *tip.read().await;
+            let current_tip = *tip.read().await;
 
             let mut ixs = vec![];
 
@@ -120,28 +123,30 @@ impl Miner {
                 signer.pubkey(),
                 signer.pubkey(),
                 find_bus(),
-                solution,
+                solution.unwrap(),
             ));
 
-            self.send_and_confirm(
-                &ixs,
-                ComputeBudget::Fixed(compute_budget),
-                current_tip.clone(),
-            )
-            .await
-            .ok();
+            self.send_and_confirm(&ixs, ComputeBudget::Fixed(500_000), current_tip.clone())
+                .await
+                .ok();
 
             tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
         }
     }
 
-    async fn find_hash_par(proof: Proof, threads: u64, min_difficulty: u32) -> Solution {
-        // Dispatch job to each thread
+    async fn find_hash_par(
+        proof: Proof,
+        threads: u64,
+        min_difficulty: u32,
+        time: u64,
+    ) -> Result<Solution, String> {
         let progress_bar = Arc::new(spinner::new_progress_bar());
-
         let best_difficulty = Arc::new(AtomicU32::new(0));
         let best_nonce = Arc::new(AtomicU64::new(0));
         let best_hash = Arc::new(Mutex::new(Hash::default()));
+        let (sender, receiver) = channel::unbounded();
+        let timeout = Duration::from_secs(time);
+        let start_time = Instant::now();
 
         let handles: Vec<_> = (0..threads)
             .map(|i| {
@@ -150,6 +155,7 @@ impl Miner {
                 let best_nonce = Arc::clone(&best_nonce);
                 let best_hash = Arc::clone(&best_hash);
                 let progress_bar = progress_bar.clone();
+                let sender = sender.clone();
 
                 std::thread::spawn(move || {
                     let mut memory = equix::SolverMemory::new();
@@ -177,7 +183,13 @@ impl Miner {
                             }
                         }
 
+                        if start_time.elapsed() > timeout {
+                            let _ = sender.send("error");
+                            return;
+                        }
+
                         if best_difficulty.load(Ordering::Relaxed) >= min_difficulty {
+                            let _ = sender.send("done");
                             return;
                         }
 
@@ -191,6 +203,19 @@ impl Miner {
             handle.join().unwrap();
         }
 
+        let msg_receiver = receiver.recv().unwrap();
+
+        if msg_receiver == "error" {
+            println!(
+                "MAX Diff {:}",
+                format!("{:?}", best_difficulty.load(Ordering::Relaxed))
+                    .bold()
+                    .blue()
+            );
+
+            return Err("Requesting new challenge".to_string());
+        }
+
         let final_best_hash = best_hash.lock().unwrap();
         let final_best_nonce = best_nonce.load(Ordering::Relaxed);
         let final_best_difficulty = best_difficulty.load(Ordering::Relaxed);
@@ -201,7 +226,10 @@ impl Miner {
             final_best_difficulty
         ));
 
-        Solution::new(final_best_hash.d, final_best_nonce.to_le_bytes())
+        Ok(Solution::new(
+            final_best_hash.d,
+            final_best_nonce.to_le_bytes(),
+        ))
     }
 
     pub fn check_num_cores(&self, threads: u64) {

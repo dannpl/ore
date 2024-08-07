@@ -118,7 +118,7 @@ impl Miner {
         let best_nonce = Arc::new(AtomicU64::new(0));
         let best_hash = Arc::new(Mutex::new(Hash::default()));
         let (sender, _receiver) = channel::unbounded();
-        let timeout = Duration::from_secs(20);
+        let timeout = Duration::from_secs(30);
         let start_time = Instant::now();
 
         let handles: Vec<_> = (0..threads)

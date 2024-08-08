@@ -108,7 +108,7 @@ impl Miner {
                 .await
                 .ok();
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         }
     }
 
@@ -118,7 +118,7 @@ impl Miner {
         let best_nonce = Arc::new(AtomicU64::new(0));
         let best_hash = Arc::new(Mutex::new(Hash::default()));
         let (sender, _receiver) = channel::unbounded();
-        let timeout = Duration::from_secs(30);
+        let timeout = Duration::from_secs(60);
         let start_time = Instant::now();
         let rt = tokio::runtime::Handle::current();
         let core_ids = core_affinity::get_core_ids().unwrap();

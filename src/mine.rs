@@ -107,8 +107,6 @@ impl Miner {
             self.send_and_confirm(&ixs, ComputeBudget::Fixed(500_000), current_tip.clone())
                 .await
                 .ok();
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
         }
     }
 

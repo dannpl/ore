@@ -121,8 +121,9 @@ impl Miner {
         let timeout = Duration::from_secs(30);
         let start_time = Instant::now();
         let rt = tokio::runtime::Handle::current();
+        let core_ids = core_affinity::get_core_ids().unwrap();
 
-        let handles: Vec<_> = (0..threads)
+        let handles: Vec<_> = core_ids
             .into_par_iter()
             .map(|i| {
                 let proof = proof.clone();
@@ -134,7 +135,7 @@ impl Miner {
 
                 rt.spawn_blocking(move || {
                     let mut memory = equix::SolverMemory::new();
-                    let mut nonce = u64::MAX.saturating_div(threads).saturating_mul(i);
+                    let mut nonce = u64::MAX.saturating_div(threads).saturating_mul(i.id as u64);
 
                     loop {
                         if best_difficulty.load(Ordering::Relaxed) >= min_difficulty

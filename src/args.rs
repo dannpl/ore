@@ -58,7 +58,6 @@ pub struct InitializeArgs {}
 
 #[derive(Parser, Debug)]
 pub struct MineArgs {
-    // #[cfg(not(feature = "gpu"))]
     #[arg(
         long,
         short,

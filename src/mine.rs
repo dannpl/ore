@@ -1,8 +1,5 @@
 use colored::*;
-use drillx::{
-    equix::{self},
-    Hash, Solution,
-};
+use drillx::{Hash, Solution};
 use futures::StreamExt;
 use ore_api::{
     consts::{BUS_ADDRESSES, BUS_COUNT},
@@ -41,8 +38,6 @@ impl Miner {
 
         let tip = Arc::new(RwLock::new(0_u64));
         let tip_clone = Arc::clone(&tip);
-
-        self.check_num_cores(args.threads);
 
         if self.jito {
             let url = "ws://bundles-api-rest.jito.wtf/api/v1/bundles/tip_stream";
@@ -89,7 +84,7 @@ impl Miner {
                 .green()
             );
 
-            let solution = Self::find_hash_par(&self, proof, args.threads, args.diff).await;
+            let solution = Self::find_hash_par(&self, proof, args.diff).await;
 
             let mut ixs = vec![];
 
@@ -112,62 +107,56 @@ impl Miner {
         }
     }
 
-    async fn find_hash_par(&self, proof: Proof, threads: u64, min_difficulty: u32) -> Solution {
+    async fn find_hash_par(&self, proof: Proof, min_difficulty: u32) -> Solution {
         let progress_bar = Arc::new(spinner::new_progress_bar());
         let best_difficulty = Arc::new(AtomicU32::new(0));
         let best_nonce = Arc::new(AtomicU64::new(0));
         let best_hash = Arc::new(Mutex::new(Hash::default()));
         let (sender, _receiver) = channel::unbounded();
-        let timeout = Duration::from_secs(60);
+        let timeout = Duration::from_secs(45);
         let start_time = Instant::now();
         let rt = tokio::runtime::Handle::current();
         let core_ids = core_affinity::get_core_ids().unwrap();
 
         let handles: Vec<_> = core_ids
             .into_par_iter()
-            .map(|i| {
+            .map(|core_id| {
                 let proof = proof.clone();
                 let best_difficulty = Arc::clone(&best_difficulty);
                 let best_nonce = Arc::clone(&best_nonce);
                 let best_hash = Arc::clone(&best_hash);
                 let progress_bar = Arc::clone(&progress_bar);
+
                 let sender = sender.clone();
 
-                rt.spawn_blocking(move || {
-                    let mut memory = equix::SolverMemory::new();
-                    let mut nonce = u64::MAX.saturating_div(threads).saturating_mul(i.id as u64);
+                rt.spawn_blocking(move || loop {
+                    if best_difficulty.load(Ordering::Relaxed) >= min_difficulty
+                        || start_time.elapsed() > timeout
+                    {
+                        let _ = sender.send(());
+                        break;
+                    }
 
-                    loop {
-                        if best_difficulty.load(Ordering::Relaxed) >= min_difficulty
-                            || start_time.elapsed() > timeout
-                        {
-                            let _ = sender.send(());
-                            break;
+                    let mut rng = rand::thread_rng();
+
+                    let nonce: u64 = core_id.id as u64 * rng.gen_range(0..u64::MAX);
+
+                    if let Ok(hx) = drillx::hash(&proof.challenge, &nonce.to_le_bytes()) {
+                        let difficulty = hx.difficulty();
+                        let current_best = best_difficulty.load(Ordering::Relaxed);
+
+                        if difficulty > current_best {
+                            best_nonce.store(nonce, Ordering::Relaxed);
+                            best_difficulty.store(difficulty, Ordering::Relaxed);
+
+                            let mut bh = best_hash.lock().unwrap();
+                            *bh = hx;
+
+                            progress_bar.set_message(format!(
+                                "Difficulty: {}",
+                                format!("{:?}", difficulty).bold().green()
+                            ));
                         }
-
-                        if let Ok(hx) = drillx::hash_with_memory(
-                            &mut memory,
-                            &proof.challenge,
-                            &nonce.to_le_bytes(),
-                        ) {
-                            let difficulty = hx.difficulty();
-                            let current_best = best_difficulty.load(Ordering::Relaxed);
-
-                            if difficulty > current_best {
-                                best_nonce.store(nonce, Ordering::Relaxed);
-                                best_difficulty.store(difficulty, Ordering::Relaxed);
-
-                                let mut bh = best_hash.lock().unwrap();
-                                *bh = hx;
-
-                                progress_bar.set_message(format!(
-                                    "Difficulty: {}",
-                                    format!("{:?}", difficulty).bold().green()
-                                ));
-                            }
-                        }
-
-                        nonce += 1;
                     }
                 })
             })
@@ -186,19 +175,17 @@ impl Miner {
         let cutoff_time = self.get_cutoff(proof).await;
 
         let mut cutt = cutoff_time;
-        let cut_progress_bar = spinner::new_progress_bar();
 
         while cutt > 0 {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             cutt -= 1;
 
-            cut_progress_bar.set_message(format!(
-                "Waiting {} sec to send",
+            progress_bar.set_message(format!(
+                "Best Difficult: {} - Waiting {} sec to send",
+                format!("{:?}", best_difficulty).bold().green(),
                 format!("{:?}", cutt).bold().green()
             ))
         }
-
-        cut_progress_bar.finish();
 
         if final_best_difficulty < min_difficulty {
             println!(
@@ -211,10 +198,8 @@ impl Miner {
 
         progress_bar.finish_with_message(format!(
             "Best hash: {} (difficulty: {})",
-            format!("{:?}", bs58::encode(final_best_hash.h).into_string())
-                .bold()
-                .green(),
-            format!("{:?}", final_best_difficulty).bold().green()
+            bs58::encode(final_best_hash.h).into_string(),
+            final_best_difficulty
         ));
 
         Solution::new(final_best_hash.d, final_best_nonce.to_le_bytes())

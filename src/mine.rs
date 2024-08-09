@@ -1,5 +1,5 @@
 use colored::*;
-use drillx::{Hash, Solution};
+use drillx::{equix, Hash, Solution};
 use futures::StreamExt;
 use ore_api::{
     consts::{BUS_ADDRESSES, BUS_COUNT},
@@ -59,6 +59,15 @@ impl Miner {
                 }
             });
         }
+
+        let core_ids = core_affinity::get_core_ids().unwrap();
+
+        println!(
+            "{}",
+            format!("Mining with {} threads", core_ids.len())
+                .bold()
+                .green()
+        );
 
         loop {
             let proof = get_proof_with_authority(&self.rpc_client, signer.pubkey()).await;
@@ -130,6 +139,7 @@ impl Miner {
 
                 let sender = sender.clone();
 
+                let mut memory = equix::SolverMemory::new();
                 rt.spawn_blocking(move || loop {
                     if best_difficulty.load(Ordering::Relaxed) >= min_difficulty
                         || start_time.elapsed() > timeout
@@ -142,7 +152,11 @@ impl Miner {
 
                     let nonce: u64 = core_id.id as u64 * rng.gen_range(0..u64::MAX);
 
-                    if let Ok(hx) = drillx::hash(&proof.challenge, &nonce.to_le_bytes()) {
+                    if let Ok(hx) = drillx::hash_with_memory(
+                        &mut memory,
+                        &proof.challenge,
+                        &nonce.to_le_bytes(),
+                    ) {
                         let difficulty = hx.difficulty();
                         let current_best = best_difficulty.load(Ordering::Relaxed);
 
